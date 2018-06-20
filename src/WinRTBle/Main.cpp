@@ -179,6 +179,7 @@ int main()
 		else
 			std::cout << "Device not found." << std::endl;
 		
+		system("pause");
 
 		return 0;
 	}
