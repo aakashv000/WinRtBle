@@ -1,3 +1,5 @@
+//TODO: Make the code modular
+
 #include "pch.h"
 
 using namespace winrt;
@@ -8,6 +10,9 @@ using namespace Windows::Devices::Bluetooth;
 using namespace Windows::Foundation::Collections;
 using namespace Windows::Devices::Bluetooth::Advertisement;
 using namespace Windows::Devices::Bluetooth::GenericAttributeProfile;
+
+#include <codecvt>
+
 
 std::wstring guidToString(GUID uuid)
 {
@@ -73,12 +78,24 @@ std::wstring bluetoothAddressTypeToString(BluetoothAddressType bluetoothAddressT
 	return ret;
 }
 
+
+IBuffer ToIBufferFromString(std::string data) {
+	std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>> converter;
+	std::wstring wide = converter.from_bytes(data);
+
+	DataWriter writer;
+	writer.WriteString(wide);
+	return writer.DetachBuffer();
+}
+
+
+
 IAsyncAction OpenDevice(unsigned long long deviceAddress)
 {
 	auto device = co_await BluetoothLEDevice::FromBluetoothAddressAsync(deviceAddress);
 
 	std::wcout << std::hex <<
-		"\tDevice Information: " << std::endl <<
+		"Device Information: " << std::endl <<
 		"\tBluetoothAddress: [" << device.BluetoothAddress() << "]" << std::endl <<
 		"\tBluetoothAddressType: [" << bluetoothAddressTypeToString(device.BluetoothAddressType()) << "]" << std::endl <<
 		"\tConnectionStatus: [" << (device.ConnectionStatus() == BluetoothConnectionStatus::Connected ? "Connected" : "Disconnected") << "]" << std::endl <<
@@ -99,17 +116,47 @@ IAsyncAction OpenDevice(unsigned long long deviceAddress)
 			std::wcout << std::hex <<
 				"\t\t\tCharacteristic - Guid: [" << guidToString(c.Uuid()) << "]" << std::endl;
 
-			if (c.CharacteristicProperties() == GattCharacteristicProperties::Read)
+			if (c.CharacteristicProperties() == GattCharacteristicProperties::Write) {
+				std::cout << "\t\t\t\tGattCharacteristicProperties::Write" << std::endl;
+
+				std::string valueToWrite = "A";
+				if (!valueToWrite.empty()) {
+					IBuffer writeBuffer = NULL;
+
+					//Assuming valueToWrite is always UTF8 string
+					writeBuffer = ToIBufferFromString(valueToWrite);
+
+					try {
+						//Writes the value from the buffer to the characteristic
+						GattCommunicationStatus result = co_await c.WriteValueAsync(writeBuffer);
+
+						std::cout << "\t\t\t\tWrote " + valueToWrite + " to this characteristic" << std::endl;
+					}
+					catch (std::exception ex) {
+						std::cerr << ex.what();
+					}
+				}
+			}
+			else	//if (c.CharacteristicProperties() == GattCharacteristicProperties::Read) and others
 			{
 				auto readResult = co_await c.ReadValueAsync();
 
 				if (readResult.Status() == GattCommunicationStatus::Success)
 				{
-					std::wcout << "\t\t\tCharacteristic Data - Size: [" << readResult.Value().Length() << "]" << std::endl;
+					std::wcout << "\t\t\t\tCharacteristic Data - Size: [" << readResult.Value().Length() << "]" << std::endl;
 
 					DataReader reader = DataReader::FromBuffer(readResult.Value());
 
-					std::wcout << "\t\t\tCharacteristic Data - [" << reader.ReadString(readResult.Value().Length()).c_str() << "]" << std::endl;
+					std::wcout << "\t\t\t\tCharacteristic Data - [" << reader.ReadString(readResult.Value().Length()).c_str() << "]" << std::endl;
+				}
+				else if (readResult.Status() == GattCommunicationStatus::Unreachable) {
+					std::cout << "\t\t\t\tGattCommunicationStatus::Unreachable" << std::endl;
+				}
+				else if (readResult.Status() == GattCommunicationStatus::AccessDenied) {
+					std::cout << "\t\t\t\tGattCommunicationStatus::AccessDenied" << std::endl;
+				}
+				else if (readResult.Status() == GattCommunicationStatus::ProtocolError) {
+					std::cout << "\t\t\t\tGattCommunicationStatus::ProtocolError" << std::endl;
 				}
 			}
 		}
@@ -144,10 +191,10 @@ int main()
 
 			std::wcout <<
 				"AdvertisementReceived:" << std::endl <<
-				"\tLocalName: [" << eventArgs.Advertisement().LocalName().c_str() << "]" <<
-				"\tAdvertisementType: [" << advertisementTypeToString(eventArgs.AdvertisementType()) << "]" <<
-				"\tBluetoothAddress: [0x" << std::hex << eventArgs.BluetoothAddress() << "]" <<
-				"\tRawSignalStrengthInDBm: [" << std::dec << eventArgs.RawSignalStrengthInDBm() << "]" <<
+				"\tLocalName: [" << eventArgs.Advertisement().LocalName().c_str() << "]" << std::endl <<
+				"\tAdvertisementType: [" << advertisementTypeToString(eventArgs.AdvertisementType()) << "]" << std::endl <<
+				"\tBluetoothAddress: [0x" << std::hex << eventArgs.BluetoothAddress() << "]" << std::endl <<
+				"\tRawSignalStrengthInDBm: [" << std::dec << eventArgs.RawSignalStrengthInDBm() << "]" << std::endl <<
 				std::endl;
 
 			for (GUID const & g : eventArgs.Advertisement().ServiceUuids())
@@ -156,7 +203,7 @@ int main()
 			deviceAddress = eventArgs.BluetoothAddress();
 		});
 
-		std::cout << "Waiting for device: ";
+		std::cout << "Waiting for device: " << std::endl;
 
 		watcher.Start();
 
