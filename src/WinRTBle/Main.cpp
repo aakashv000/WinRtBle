@@ -12,6 +12,9 @@ using namespace Windows::Devices::Bluetooth::Advertisement;
 using namespace Windows::Devices::Bluetooth::GenericAttributeProfile;
 
 #include <codecvt>
+//#include <bluetoothleapis.h>
+//using namespace System::ComponentModel;
+
 
 
 std::wstring guidToString(GUID uuid)
@@ -90,6 +93,49 @@ IBuffer ToIBufferFromString(std::string data) {
 
 
 
+/////////////////////////////////////////////TODO: make this a readValue function
+//void GetNotificationData(GenericAttributeProfile::GattCharacteristic c, int repeatInterval) {
+//	auto readResult = co_await c.ReadValueAsync();
+//	DataReader reader = DataReader::FromBuffer(readResult.Value());
+//	std::cout << "\t\t\t\tCharacteristic Data - [" << reader.ReadString(readResult.Value().Length()).c_str() << "]" << std::endl;
+//}
+
+
+
+
+void ValueChanged_Handler(GattCharacteristic sender, GattValueChangedEventArgs args) {
+	std::wcout << "ValueChanged_Handler: "
+		<< sender.AttributeHandle() << " "
+		<< std::endl;
+}
+
+
+
+void PrintCharProperties(GattCharacteristic c) {
+	if (c.CharacteristicProperties() == GattCharacteristicProperties::Notify) {
+		std::cout << "\t\t\t\tGattCharacteristicProperties::Notify" << std::endl;
+	}
+	else if (c.CharacteristicProperties() == GattCharacteristicProperties::Indicate) {
+		std::cout << "\t\t\t\tGattCharacteristicProperties::Indicate" << std::endl;
+	}
+	else if (c.CharacteristicProperties() == GattCharacteristicProperties::Read) {
+		std::cout << "\t\t\t\tGattCharacteristicProperties::Read" << std::endl;
+	}
+	else if (c.CharacteristicProperties() == GattCharacteristicProperties::Write) {
+		std::cout << "\t\t\t\tGattCharacteristicProperties::Write" << std::endl;
+	}
+	else if (c.CharacteristicProperties() == GattCharacteristicProperties::Broadcast) {
+		std::cout << "\t\t\t\tGattCharacteristicProperties::Broadcast" << std::endl;
+	}
+	else {
+		std::cout << "\t\t\t\tGattCharacteristicProperties::*No match found*" << std::endl;
+
+		//c.ValueChanged();
+	}
+}
+
+
+
 IAsyncAction OpenDevice(unsigned long long deviceAddress)
 {
 	auto device = co_await BluetoothLEDevice::FromBluetoothAddressAsync(deviceAddress);
@@ -116,8 +162,11 @@ IAsyncAction OpenDevice(unsigned long long deviceAddress)
 			std::wcout << std::hex <<
 				"\t\t\tCharacteristic - Guid: [" << guidToString(c.Uuid()) << "]" << std::endl;
 
+			PrintCharProperties(c);
+
+			//If it is a WRITE characteristic
 			if (c.CharacteristicProperties() == GattCharacteristicProperties::Write) {
-				std::cout << "\t\t\t\tGattCharacteristicProperties::Write" << std::endl;
+				//std::cout << "\t\t\t\tGattCharacteristicProperties::Write" << std::endl;
 
 				std::string valueToWrite = "A";
 				if (!valueToWrite.empty()) {
@@ -137,6 +186,47 @@ IAsyncAction OpenDevice(unsigned long long deviceAddress)
 					}
 				}
 			}
+			//If it a NOTIFY characteristic
+			else if (c.CharacteristicProperties() == GattCharacteristicProperties::Notify) {
+				//std::cout << "\t\t\t\tGattCharacteristicProperties::Notify" << std::endl;
+
+				try {
+					// BT_Code: Must write the CCCD in order for server to send indications.
+					// We receive them in the ValueChanged event handler.
+					// Note that this sample configures either Indicate or Notify, but not both.
+					auto result = co_await c.WriteClientCharacteristicConfigurationDescriptorAsync(
+						GattClientCharacteristicConfigurationDescriptorValue::Notify);
+
+					////////////////////////////////////////////////////////////////////////////////
+					//GattCharacteristic gc = c;
+					c.ValueChanged += ValueChanged_Handler;
+
+					if (result == GattCommunicationStatus::Success) {
+
+						auto readResult = co_await c.ReadValueAsync();
+						if (readResult.Status() == GattCommunicationStatus::Success) {
+							DataReader reader = DataReader::FromBuffer(readResult.Value());
+							std::wcout << "\t\t\t\tCharacteristic Data - [" << reader.ReadString(readResult.Value().Length()).c_str() << "]" << std::endl;			//If cout instead of wcout is used -> data will be printed in some other format
+						}
+
+						//std::thread notifyThread(GetNotificationData(c, 1));
+					}
+
+					/*PBTH_LE_GATT_CHARACTERISTIC pCharBuffer;
+					pCharBuffer = (PBTH_LE_GATT_CHARACTERISTIC)
+						malloc(charBufferSize * sizeof(BTH_LE_GATT_CHARACTERISTIC));
+						
+					BLUETOOTH_GATT_EVENT_HANDLE EventHandle;
+
+					BTH_LE_GATT_EVENT_TYPE EventType = CharacteristicValueChangedEvent;
+
+					BLUETOOTH_GATT_VALUE_CHANGED_EVENT_REGISTRATION EventParameterIn;
+					EventParameterIn.Characteristics[0] = *currGattChar;*/
+				}
+				catch (const std::exception& e) {
+					std::cout << e.what() << std::endl;
+				}
+			}
 			else	//if (c.CharacteristicProperties() == GattCharacteristicProperties::Read) and others
 			{
 				auto readResult = co_await c.ReadValueAsync();
@@ -146,7 +236,6 @@ IAsyncAction OpenDevice(unsigned long long deviceAddress)
 					std::wcout << "\t\t\t\tCharacteristic Data - Size: [" << readResult.Value().Length() << "]" << std::endl;
 
 					DataReader reader = DataReader::FromBuffer(readResult.Value());
-
 					std::wcout << "\t\t\t\tCharacteristic Data - [" << reader.ReadString(readResult.Value().Length()).c_str() << "]" << std::endl;
 				}
 				else if (readResult.Status() == GattCommunicationStatus::Unreachable) {
