@@ -1,4 +1,5 @@
 //TODO: Make the code modular
+// TODO: Remove redundant include's
 
 #include "pch.h"
 
@@ -12,8 +13,12 @@ using namespace Windows::Devices::Bluetooth::Advertisement;
 using namespace Windows::Devices::Bluetooth::GenericAttributeProfile;
 
 #include <codecvt>
-//#include <bluetoothleapis.h>
+#include <bluetoothleapis.h>
 //using namespace System::ComponentModel;
+//#include "winrt\impl\Windows.Devices.Bluetooth.GenericAttributeProfile.0.h"
+//#include "winrt\impl\Windows.Devices.Bluetooth.GenericAttributeProfile.1.h"
+//#include "winrt\impl\Windows.Devices.Bluetooth.GenericAttributeProfile.2.h"
+#include <string>
 
 
 
@@ -92,27 +97,63 @@ IBuffer ToIBufferFromString(std::string data) {
 }
 
 
-
-/////////////////////////////////////////////TODO: make this a readValue function
-//void GetNotificationData(GenericAttributeProfile::GattCharacteristic c, int repeatInterval) {
-//	auto readResult = co_await c.ReadValueAsync();
-//	DataReader reader = DataReader::FromBuffer(readResult.Value());
-//	std::cout << "\t\t\t\tCharacteristic Data - [" << reader.ReadString(readResult.Value().Length()).c_str() << "]" << std::endl;
-//}
-
-
-
-
-void ValueChanged_Handler(GattCharacteristic sender, GattValueChangedEventArgs args) {
-	std::wcout << "ValueChanged_Handler: "
-		<< sender.AttributeHandle() << " "
-		<< std::endl;
+void PrintStringFromIBuffer(IBuffer buffer) {
+	DataReader reader = DataReader::FromBuffer( buffer );
+	std::wcout << reader.ReadString(buffer.Length()).c_str() << std::endl;
 }
+
+
+std::string uint64_t_to_string(int64_t value) {
+	std::ostringstream o;
+	o << value;
+	return o.str();
+}
+
+std::string uint32_t_to_string(uint32_t value) {
+	std::stringstream ss;
+	ss << value;
+	std::string str;
+	ss >> str;
+	return str;
+}
+
+
+
+//////////// TODO: Replace all snippets for reading characteristic data with this function
+//Works, but thread execution gets mixed up, due to async reading
+IAsyncAction ReadCharacteristicData(GattCharacteristic c) {
+	auto readResult = co_await c.ReadValueAsync();
+	if (readResult.Status() == GattCommunicationStatus::Success) {
+		DataReader reader = DataReader::FromBuffer(readResult.Value());
+		std::wcout << "ReadCharacteristicData: [" << reader.ReadString(readResult.Value().Length()).c_str() << "]" << std::endl;		//### wcout is must( don't use cout )
+	}
+}
+
+
+
+// This is the TYPED event handler
+void ValueChanged_Handler(GattCharacteristic sender, GattValueChangedEventArgs args) {
+	std::cout << "ValueChanged_Handler: ["
+		<< uint64_t_to_string(sender.AttributeHandle())
+		<< "]" << std::endl;
+
+	PrintStringFromIBuffer(args.CharacteristicValue());
+	//ReadCharacteristicData( sender );			//Gives exactly the same data as -> PrintStringFromIBuffer(args.CharacteristicValue());
+}
+
+
+//class myEventHandler: TypedEventHandler< GattCharacteristic, GattValueChangedEventArgs >{
+//	public event TypedEventHandler< GattCharacteristic, GattValueChangedEventArgs > ValueChanged;
+//};
+
+
 
 
 
 void PrintCharProperties(GattCharacteristic c) {
 	if (c.CharacteristicProperties() == GattCharacteristicProperties::Notify) {
+		//c.ValueChanged();
+
 		std::cout << "\t\t\t\tGattCharacteristicProperties::Notify" << std::endl;
 	}
 	else if (c.CharacteristicProperties() == GattCharacteristicProperties::Indicate) {
@@ -129,8 +170,6 @@ void PrintCharProperties(GattCharacteristic c) {
 	}
 	else {
 		std::cout << "\t\t\t\tGattCharacteristicProperties::*No match found*" << std::endl;
-
-		//c.ValueChanged();
 	}
 }
 
@@ -157,14 +196,21 @@ IAsyncAction OpenDevice(unsigned long long deviceAddress)
 
 		auto characteristics = co_await s.GetCharacteristicsAsync();
 
-		for (GenericAttributeProfile::GattCharacteristic const & c : characteristics.Characteristics())
+		for ( GattCharacteristic const & c : characteristics.Characteristics())
 		{
+			// Adding the ValueChanged event to the Characteristic c
+			auto x = c.ValueChanged( ValueChanged_Handler);// += ValueChanged_Handler;
+			/////////////// TODO: Consider adding the ValueChanged event only to Notify characteristics, using PrintCharProperties function
+			
+			std::string val = uint64_t_to_string(x.value);
+			std::cout << val << std::endl;
+
 			std::wcout << std::hex <<
 				"\t\t\tCharacteristic - Guid: [" << guidToString(c.Uuid()) << "]" << std::endl;
 
 			PrintCharProperties(c);
 
-			//If it is a WRITE characteristic
+			// If it is a WRITE characteristic
 			if (c.CharacteristicProperties() == GattCharacteristicProperties::Write) {
 				//std::cout << "\t\t\t\tGattCharacteristicProperties::Write" << std::endl;
 
@@ -186,7 +232,7 @@ IAsyncAction OpenDevice(unsigned long long deviceAddress)
 					}
 				}
 			}
-			//If it a NOTIFY characteristic
+			// If it a NOTIFY characteristic
 			else if (c.CharacteristicProperties() == GattCharacteristicProperties::Notify) {
 				//std::cout << "\t\t\t\tGattCharacteristicProperties::Notify" << std::endl;
 
@@ -197,9 +243,6 @@ IAsyncAction OpenDevice(unsigned long long deviceAddress)
 					auto result = co_await c.WriteClientCharacteristicConfigurationDescriptorAsync(
 						GattClientCharacteristicConfigurationDescriptorValue::Notify);
 
-					////////////////////////////////////////////////////////////////////////////////
-					//GattCharacteristic gc = c;
-					c.ValueChanged += ValueChanged_Handler;
 
 					if (result == GattCommunicationStatus::Success) {
 
@@ -227,7 +270,7 @@ IAsyncAction OpenDevice(unsigned long long deviceAddress)
 					std::cout << e.what() << std::endl;
 				}
 			}
-			else	//if (c.CharacteristicProperties() == GattCharacteristicProperties::Read) and others
+			else	// if (c.CharacteristicProperties() == GattCharacteristicProperties::Read) and others
 			{
 				auto readResult = co_await c.ReadValueAsync();
 
@@ -315,6 +358,8 @@ int main()
 		else
 			std::cout << "Device not found." << std::endl;
 		
+		//while (true) {}
+		//Sleep(10000);
 		system("pause");
 
 		return 0;
