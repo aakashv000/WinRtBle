@@ -13,12 +13,14 @@ using namespace Windows::Devices::Bluetooth::Advertisement;
 using namespace Windows::Devices::Bluetooth::GenericAttributeProfile;
 
 #include <codecvt>
-#include <bluetoothleapis.h>
+//#include <bluetoothleapis.h>
 //using namespace System::ComponentModel;
 //#include "winrt\impl\Windows.Devices.Bluetooth.GenericAttributeProfile.0.h"
 //#include "winrt\impl\Windows.Devices.Bluetooth.GenericAttributeProfile.1.h"
 //#include "winrt\impl\Windows.Devices.Bluetooth.GenericAttributeProfile.2.h"
 #include <string>
+//#include <pthread.h>
+//#include <unistd.h>
 
 
 
@@ -88,12 +90,19 @@ std::wstring bluetoothAddressTypeToString(BluetoothAddressType bluetoothAddressT
 
 
 IBuffer ToIBufferFromString(std::string data) {
+	//First convert std::string to std::wstring
 	std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>> converter;
 	std::wstring wide = converter.from_bytes(data);
 
 	DataWriter writer;
 	writer.WriteString(wide);
 	return writer.DetachBuffer();
+}
+
+
+std::string wstring_from_string(std::wstring wstr) {
+	std::string str = std::wstring_convert<std::codecvt_utf8<wchar_t>>().to_bytes( wstr );
+	return str;
 }
 
 
@@ -133,6 +142,8 @@ IAsyncAction ReadCharacteristicData(GattCharacteristic c) {
 
 // This is the TYPED event handler
 void ValueChanged_Handler(GattCharacteristic sender, GattValueChangedEventArgs args) {
+	std::cout << "ValueChanged_Handler: thread id = " << std::this_thread::get_id() << std::endl;
+
 	std::cout << "ValueChanged_Handler: ["
 		<< uint64_t_to_string(sender.AttributeHandle())
 		<< "]" << std::endl;
@@ -145,6 +156,15 @@ void ValueChanged_Handler(GattCharacteristic sender, GattValueChangedEventArgs a
 //class myEventHandler: TypedEventHandler< GattCharacteristic, GattValueChangedEventArgs >{
 //	public event TypedEventHandler< GattCharacteristic, GattValueChangedEventArgs > ValueChanged;
 //};
+
+
+void WaitThread( int threadId) {
+	std::cout << "In WaitThread: " << threadId << std::endl;
+	Sleep(10000);
+	std::cout << "Exiting WaitThread: " << threadId << std::endl;
+	//pthread_exit(NULL);
+	return;
+}
 
 
 
@@ -177,7 +197,11 @@ void PrintCharProperties(GattCharacteristic c) {
 
 IAsyncAction OpenDevice(unsigned long long deviceAddress)
 {
+	std::cout << "OpenDevice() - before getting device: thread id = " << std::this_thread::get_id() << std::endl;
+
 	auto device = co_await BluetoothLEDevice::FromBluetoothAddressAsync(deviceAddress);
+
+	std::cout << "OpenDevice() - after getting device: thread id = " << std::this_thread::get_id() << std::endl;
 
 	std::wcout << std::hex <<
 		"Device Information: " << std::endl <<
@@ -205,6 +229,8 @@ IAsyncAction OpenDevice(unsigned long long deviceAddress)
 			std::string val = uint64_t_to_string(x.value);
 			std::cout << val << std::endl;
 
+			std::cout << "OpenDevice() - in Characteristics(): thread id = " << std::this_thread::get_id() << std::endl;
+
 			std::wcout << std::hex <<
 				"\t\t\tCharacteristic - Guid: [" << guidToString(c.Uuid()) << "]" << std::endl;
 
@@ -226,6 +252,8 @@ IAsyncAction OpenDevice(unsigned long long deviceAddress)
 						GattCommunicationStatus result = co_await c.WriteValueAsync(writeBuffer);
 
 						std::cout << "\t\t\t\tWrote " + valueToWrite + " to this characteristic" << std::endl;
+
+						//while (true) {}		//## Works
 					}
 					catch (std::exception ex) {
 						std::cerr << ex.what();
@@ -254,17 +282,6 @@ IAsyncAction OpenDevice(unsigned long long deviceAddress)
 
 						//std::thread notifyThread(GetNotificationData(c, 1));
 					}
-
-					/*PBTH_LE_GATT_CHARACTERISTIC pCharBuffer;
-					pCharBuffer = (PBTH_LE_GATT_CHARACTERISTIC)
-						malloc(charBufferSize * sizeof(BTH_LE_GATT_CHARACTERISTIC));
-						
-					BLUETOOTH_GATT_EVENT_HANDLE EventHandle;
-
-					BTH_LE_GATT_EVENT_TYPE EventType = CharacteristicValueChangedEvent;
-
-					BLUETOOTH_GATT_VALUE_CHANGED_EVENT_REGISTRATION EventParameterIn;
-					EventParameterIn.Characteristics[0] = *currGattChar;*/
 				}
 				catch (const std::exception& e) {
 					std::cout << e.what() << std::endl;
@@ -292,9 +309,30 @@ IAsyncAction OpenDevice(unsigned long long deviceAddress)
 				}
 			}
 		}
+
+
+		if ( wstring_from_string( guidToString(s.Uuid())) == "6e400001-b5a3-f393-e0a9-e50e24dcca9e") {
+			// Keep this running so that notification continues to be received
+			// This exits after the loop-time expires
+			//for (int i = 0; i < 100; i++) { Sleep(1000); }			// #### Works same as Sleep(100*1000)
+
+			std::cout << "OpenDevice - in Services() - before Sleep(): thread id = " << std::this_thread::get_id() << std::endl;
+
+			int duration_of_receiving_notification = 3000;		//in milli-seconds
+			Sleep( duration_of_receiving_notification );
+		}
+		else {
+			std::cout << wstring_from_string(guidToString(s.Uuid())) << std::endl;
+		}
 	}
+	std::cout << "OpenDevice - before device.Close(): thread id = " << std::this_thread::get_id() << std::endl;
+	//????!!! This Sleep() doesn't work here as required( for continuing to receive notifications )
+	//int duration_of_receiving_notification = 3000;		//in milli-seconds
+	//Sleep( duration_of_receiving_notification );
 
 	device.Close();
+
+	std::cout << "OpenDevice - after device.Close(): thread id = " << std::this_thread::get_id() << std::endl;
 }
 
 int main()
@@ -353,15 +391,30 @@ int main()
 		{
 			std::cout << "Device found." << std::endl;
 
+			std::cout << "main - before OpenDevice(): thread id = " << std::this_thread::get_id() << std::endl;
+
 			OpenDevice(deviceAddress).get();
 		}
 		else
 			std::cout << "Device not found." << std::endl;
 		
-		//while (true) {}
-		//Sleep(10000);
-		system("pause");
 
+		std::cout << "main - before system(pause): thread id = " << std::this_thread::get_id() << std::endl;
+
+		/*while (true) {
+			std::cout << "|";
+		}*/
+		//Sleep(1000);
+		system("pause");
+		
+		/*pthread_t t;
+		int i = 0;
+		pthread_create(&t, NULL, WaitThread, (void *)i );*/
+		
+		//std::thread t1( WaitThread, 1 );
+		//t1.join();
+
+		//pthread_exit(NULL);
 		return 0;
 	}
 	catch (const std::exception& e)
