@@ -100,7 +100,7 @@ IBuffer ToIBufferFromString(std::string data) {
 }
 
 
-std::string wstring_from_string(std::wstring wstr) {
+std::string string_from_wstring(std::wstring wstr) {
 	std::string str = std::wstring_convert<std::codecvt_utf8<wchar_t>>().to_bytes( wstr );
 	return str;
 }
@@ -192,6 +192,16 @@ void PrintCharProperties(GattCharacteristic c) {
 		std::cout << "\t\t\t\tGattCharacteristicProperties::*No match found*" << std::endl;
 	}
 }
+
+
+
+std::wstring GetLastService_UuidId_wstring(GattDeviceServicesResult services) {
+	GattDeviceService lastService = services.Services().GetAt(services.Services().Size() - 1);
+	std::wstring uuid = guidToString(lastService.Uuid());
+	return uuid;
+}
+
+
 
 
 
@@ -315,8 +325,8 @@ IAsyncAction OpenDevice(unsigned long long deviceAddress)
 			}
 		}
 
-		//## Hardcoded to check for the last service of the device
-		if ( wstring_from_string( guidToString(s.Uuid())) == "6e400001-b5a3-f393-e0a9-e50e24dcca9e") {
+		//## Hardcoded to check for the last service of the device -> Changed to automatically finding the last service
+		if ( guidToString(s.Uuid()) == GetLastService_UuidId_wstring(services) ) {
 			// Keep this running so that notification continues to be received
 			// This exits after the loop-time expires
 			//for (int i = 0; i < 100; i++) { Sleep(1000); }			// #### Works same as Sleep(100*1000)
@@ -327,7 +337,7 @@ IAsyncAction OpenDevice(unsigned long long deviceAddress)
 			Sleep( duration_of_receiving_notification );
 		}
 		else {
-			std::cout << wstring_from_string(guidToString(s.Uuid())) << std::endl;
+			std::cout << string_from_wstring(guidToString(s.Uuid())) << std::endl;
 		}
 	}
 	std::cout << "OpenDevice - before device.Close(): thread id = " << std::this_thread::get_id() << std::endl;
