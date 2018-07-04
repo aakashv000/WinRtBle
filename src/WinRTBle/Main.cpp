@@ -213,6 +213,8 @@ IAsyncAction OpenDevice(unsigned long long deviceAddress)
 
 	auto services = co_await device.GetGattServicesAsync();
 
+	std::cout << "OpenDevice() - after getting GattServices: thread id = " << std::this_thread::get_id() << std::endl;
+
 	for (GenericAttributeProfile::GattDeviceService const & s : services.Services())
 	{
 		std::wcout << std::hex <<
@@ -265,12 +267,15 @@ IAsyncAction OpenDevice(unsigned long long deviceAddress)
 				//std::cout << "\t\t\t\tGattCharacteristicProperties::Notify" << std::endl;
 
 				try {
+					std::cout << "OpenDevice - in Notify Char. - before writing CCCD: thread id = " << std::this_thread::get_id() << std::endl;
+
 					// BT_Code: Must write the CCCD in order for server to send indications.
 					// We receive them in the ValueChanged event handler.
 					// Note that this sample configures either Indicate or Notify, but not both.
 					auto result = co_await c.WriteClientCharacteristicConfigurationDescriptorAsync(
 						GattClientCharacteristicConfigurationDescriptorValue::Notify);
 
+					std::cout << "OpenDevice - in Notify Char. - after writing CCCD: thread id = " << std::this_thread::get_id() << std::endl;
 
 					if (result == GattCommunicationStatus::Success) {
 
@@ -310,7 +315,7 @@ IAsyncAction OpenDevice(unsigned long long deviceAddress)
 			}
 		}
 
-
+		//## Hardcoded to check for the last service of the device
 		if ( wstring_from_string( guidToString(s.Uuid())) == "6e400001-b5a3-f393-e0a9-e50e24dcca9e") {
 			// Keep this running so that notification continues to be received
 			// This exits after the loop-time expires
@@ -318,7 +323,7 @@ IAsyncAction OpenDevice(unsigned long long deviceAddress)
 
 			std::cout << "OpenDevice - in Services() - before Sleep(): thread id = " << std::this_thread::get_id() << std::endl;
 
-			int duration_of_receiving_notification = 3000;		//in milli-seconds
+			int duration_of_receiving_notification = 1000;		//in milli-seconds
 			Sleep( duration_of_receiving_notification );
 		}
 		else {
