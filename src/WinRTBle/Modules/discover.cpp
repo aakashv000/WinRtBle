@@ -3,7 +3,7 @@
 using namespace winrt;			//For init_apartment()
 using namespace Windows::Devices::Bluetooth::Advertisement;			//Must be below using namespace winrt
 #include <set>
-#include "src/WinRTBle/Helpers/converters.cpp"
+//#include "src/WinRTBle/Helpers/converters.cpp"
 
 
 int main()
@@ -32,26 +32,26 @@ int main()
 		{
 			//watcher.Stop();
 
-			std::wcout <<
-				"AdvertisementReceived:" << std::endl <<
-				"\tLocalName: [" << eventArgs.Advertisement().LocalName().c_str() << "]" << std::endl <<
-				//"\tAdvertisementType: [" << advertisementTypeToString(eventArgs.AdvertisementType()) << "]" << std::endl <<
-				"\tBluetoothAddress: [0x" << std::hex << eventArgs.BluetoothAddress() << "]" << std::endl <<
-				"\tRawSignalStrengthInDBm: [" << std::dec << eventArgs.RawSignalStrengthInDBm() << "]" << std::endl <<
-				std::endl;
+			//std::wcout <<
+			//	"AdvertisementReceived:" << std::endl <<
+			//	"\tLocalName: [" << eventArgs.Advertisement().LocalName().c_str() << "]" << std::endl <<
+			//	//"\tAdvertisementType: [" << advertisementTypeToString(eventArgs.AdvertisementType()) << "]" << std::endl <<
+			//	"\tBluetoothAddress: [0x" << std::hex << eventArgs.BluetoothAddress() << "]" << std::endl <<
+			//	"\tRawSignalStrengthInDBm: [" << std::dec << eventArgs.RawSignalStrengthInDBm() << "]" << std::endl <<
+			//	std::endl;
 
-			for (GUID const & g : eventArgs.Advertisement().ServiceUuids())
-				//std::wcout << "ServiceUUID: [" << guidToString(g) << "]" << std::endl;
+			/*for (GUID const & g : eventArgs.Advertisement().ServiceUuids())
+				std::wcout << "ServiceUUID: [" << guidToString(g) << "]" << std::endl;*/
 
 			deviceAddress = eventArgs.BluetoothAddress();
 
 			/*if (found_devices.count(deviceAddress) == 0) {
 				found_devices.insert(deviceAddress);
 			}*/
-			found_devices.insert(eventArgs.BluetoothAddress());
+			found_devices.insert(deviceAddress);
 		});
 
-		std::cout << "Waiting for device: " << std::endl;
+		//std::cout << "Waiting for device: " << std::endl;
 
 		watcher.Start();
 
@@ -60,42 +60,39 @@ int main()
 		while ( (count++ < timeout) )// && deviceAddress == 0)
 		{
 			std::this_thread::sleep_for(std::chrono::seconds(1));
-			std::cout << '.';
+			//std::cout << '.';
 		}
 
 		watcher.Stop();
-		std::cout << std::endl << "Finished waiting for device." << std::endl;
+
+		/*std::cout << std::endl << "Finished waiting for device." << std::endl;
 
 		std::cout << "List of unique devices found = " << found_devices.size() << ":" << std::endl;
 		for (std::set<unsigned long long>::iterator it = found_devices.begin(); it != found_devices.end(); ++it) {
 			std::wcout << std::hex << (*it) << std::endl;
-		}
+		}*/
 		for (auto const & device : found_devices) {
 			std::cout << device << std::endl;
-			std::cout << decimalToBinary(device) << std::endl;
-			std::cout << binaryToHexadecimal (decimalToBinary(device)) << std::endl;
+			//std::cout << decimalToBinary(device) << std::endl;
+			//std::cout << binaryToHexadecimal (decimalToBinary(device)) << std::endl;
+			//#### No need of conversion of address into hex string coz we are taking the device address from console and thus we don't need to get it as a variable
+			//std::wcout << std::hex << device << std::endl;
 		}
 
 
-		if (deviceAddress != 0)
+		if ( found_devices.size() == 0 )
 		{
-			std::cout << "Device found." << std::endl;
-
-			std::cout << "main - before OpenDevice(): thread id = " << std::this_thread::get_id() << std::endl;
-
-			//OpenDevice(deviceAddress).get();
+			std::cout << "No device found" << std::endl;			//TODO: What should be printed if no device is found
 		}
-		else
-			std::cout << "Device not found." << std::endl;
 
-
-		std::cout << "main - before system(pause): thread id = " << std::this_thread::get_id() << std::endl;
+		//std::cout << "main - before system(pause): thread id = " << std::this_thread::get_id() << std::endl;
 
 		/*while (true) {
 		std::cout << "|";
 		}*/
 		//Sleep(1000);
-		system("pause");
+
+		//system("pause");
 
 		/*pthread_t t;
 		int i = 0;
