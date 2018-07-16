@@ -21,6 +21,8 @@ using namespace Windows::Devices::Bluetooth::GenericAttributeProfile;
 #include <string>
 //#include <pthread.h>
 //#include <unistd.h>
+#include <set>
+#include <typeinfo>
 
 
 
@@ -108,7 +110,12 @@ std::string string_from_wstring(std::wstring wstr) {
 
 void PrintStringFromIBuffer(IBuffer buffer) {
 	DataReader reader = DataReader::FromBuffer( buffer );
-	std::wcout << reader.ReadString(buffer.Length()).c_str() << std::endl;
+	std::cout << "<" << reader.ReadString(buffer.Length()).c_str() << ">" << std::endl;		//Previously was std::wcout
+}
+
+void PrintIntFromIBuffer(IBuffer buffer) {
+	DataReader reader = DataReader::FromBuffer(buffer);
+	std::cout << "<" << reader.ReadInt32() << ">" << std::endl;
 }
 
 
@@ -148,6 +155,8 @@ void ValueChanged_Handler(GattCharacteristic sender, GattValueChangedEventArgs a
 		<< uint64_t_to_string(sender.AttributeHandle())
 		<< "]" << std::endl;
 
+	//PrintIntFromIBuffer(args.CharacteristicValue());
+
 	PrintStringFromIBuffer(args.CharacteristicValue());
 	//ReadCharacteristicData( sender );			//Gives exactly the same data as -> PrintStringFromIBuffer(args.CharacteristicValue());
 }
@@ -168,10 +177,32 @@ void WaitThread( int threadId) {
 
 
 
+IAsyncAction WriteStringToChar(GattCharacteristic c, std::string valueToWrite ) {
+	//std::string valueToWrite = "ff";
+	if (!valueToWrite.empty()) {
+		IBuffer writeBuffer = NULL;
+
+		//Assuming valueToWrite is always UTF8 string
+		writeBuffer = ToIBufferFromString(valueToWrite);
+
+		try {
+			//Writes the value from the buffer to the characteristic
+			GattCommunicationStatus result = co_await c.WriteValueAsync(writeBuffer);
+
+			std::cout << "\t\t\t\tWrote " + valueToWrite + " to this characteristic" << std::endl;
+		}
+		catch (std::exception ex) {
+			std::cerr << ex.what();
+		}
+	}
+}
+
+
+
 
 
 void PrintCharProperties(GattCharacteristic c) {
-	if (c.CharacteristicProperties() == GattCharacteristicProperties::Notify) {
+	if (c.CharacteristicProperties() == GattCharacteristicProperties::Notify ) {
 		//c.ValueChanged();
 
 		std::cout << "\t\t\t\tGattCharacteristicProperties::Notify" << std::endl;
@@ -188,8 +219,54 @@ void PrintCharProperties(GattCharacteristic c) {
 	else if (c.CharacteristicProperties() == GattCharacteristicProperties::Broadcast) {
 		std::cout << "\t\t\t\tGattCharacteristicProperties::Broadcast" << std::endl;
 	}
+	else if (c.CharacteristicProperties() == ( GattCharacteristicProperties::Read | GattCharacteristicProperties::Notify ) ) {
+		std::cout << "\t\t\t\tGattCharacteristicProperties::Read and Notify" << std::endl;
+	}
+	else if (c.CharacteristicProperties() == (GattCharacteristicProperties::Write | GattCharacteristicProperties::WriteWithoutResponse )) {
+		std::cout << "\t\t\t\tGattCharacteristicProperties::Write and WriteWithoutResponse" << std::endl;
+
+		//TODO: Shift to an char. specific operations
+		/////HARDCODING
+		if (uint64_t_to_string(c.AttributeHandle()) != "18") {
+			WriteStringToChar(c, "ff");
+		}
+	}
+	else if (c.CharacteristicProperties() == (GattCharacteristicProperties::Read | GattCharacteristicProperties::Write)) {
+		std::cout << "\t\t\t\tGattCharacteristicProperties::Read and Write" << std::endl;
+	}
 	else {
 		std::cout << "\t\t\t\tGattCharacteristicProperties::*No match found*" << std::endl;
+	}
+}
+
+//Error: left of HasFlag must be class/struct/union
+//std::set< std::string > GetAllCharProperties(GattCharacteristic c) {
+//	std::set< std::string > properties;
+//
+//	if (c.CharacteristicProperties.HasFlag( GattCharacteristicProperties::None) ) {}
+//	if (c.CharacteristicProperties.HasFlag( GattCharacteristicProperties::Read ) ) {
+//		properties.insert("Read");
+//	}
+//	if (c.CharacteristicProperties.HasFlag( GattCharacteristicProperties::Write ) ) {
+//		properties.insert("Write");
+//	}
+//	if (c.CharacteristicProperties.HasFlag( GattCharacteristicProperties::Notify ) ) {
+//		properties.insert("Notify");
+//	}
+//	if (c.CharacteristicProperties.HasFlag( GattCharacteristicProperties::Indicate ) ) {
+//		properties.insert("Indicate");
+//	}
+//
+//	return properties;
+//}
+
+
+IAsyncAction WriteCCCD(GattCharacteristic c) {
+	if (c.CharacteristicProperties() == GattCharacteristicProperties::Notify) {
+		auto result = co_await c.WriteClientCharacteristicConfigurationDescriptorAsync(GattClientCharacteristicConfigurationDescriptorValue::Notify);
+	}
+	else if (c.CharacteristicProperties() == (GattCharacteristicProperties::Read | GattCharacteristicProperties::Notify)) {
+		auto result = co_await c.WriteClientCharacteristicConfigurationDescriptorAsync(GattClientCharacteristicConfigurationDescriptorValue::Notify );
 	}
 }
 
@@ -199,6 +276,12 @@ std::wstring GetLastService_UuidId_wstring(GattDeviceServicesResult services) {
 	GattDeviceService lastService = services.Services().GetAt(services.Services().Size() - 1);
 	std::wstring uuid = guidToString(lastService.Uuid());
 	return uuid;
+}
+
+void PrintStringSet(std::set< std::string > set) {
+	for (auto const & i : set) {
+		std::cout << i << std::endl;
+	}
 }
 
 
@@ -217,7 +300,7 @@ IAsyncAction OpenDevice(unsigned long long deviceAddress)
 		"Device Information: " << std::endl <<
 		"\tBluetoothAddress: [" << device.BluetoothAddress() << "]" << std::endl <<
 		"\tBluetoothAddressType: [" << bluetoothAddressTypeToString(device.BluetoothAddressType()) << "]" << std::endl <<
-		"\tConnectionStatus: [" << (device.ConnectionStatus() == BluetoothConnectionStatus::Connected ? "Connected" : "Disconnected") << "]" << std::endl <<
+		//"\tConnectionStatus: [" << (device.ConnectionStatus() == BluetoothConnectionStatus::Connected ? "Connected" : "Disconnected") << "]" << std::endl <<
 		"\tDeviceId: [" << device.DeviceId().c_str() << "]" << std::endl <<
 		std::endl;
 
@@ -237,7 +320,6 @@ IAsyncAction OpenDevice(unsigned long long deviceAddress)
 			// Adding the ValueChanged event to the Characteristic c
 			auto x = c.ValueChanged( ValueChanged_Handler);// += ValueChanged_Handler;
 			/////////////// TODO: Consider adding the ValueChanged event only to Notify characteristics, using PrintCharProperties function
-			
 			std::string val = uint64_t_to_string(x.value);
 			std::cout << val << std::endl;
 
@@ -246,7 +328,12 @@ IAsyncAction OpenDevice(unsigned long long deviceAddress)
 			std::wcout << std::hex <<
 				"\t\t\tCharacteristic - Guid: [" << guidToString(c.Uuid()) << "]" << std::endl;
 
+
 			PrintCharProperties(c);
+			//PrintStringSet(GetAllCharProperties(c));
+			
+			WriteCCCD(c);
+
 
 			// If it is a WRITE characteristic
 			if (c.CharacteristicProperties() == GattCharacteristicProperties::Write) {
@@ -272,6 +359,7 @@ IAsyncAction OpenDevice(unsigned long long deviceAddress)
 					}
 				}
 			}
+
 			// If it a NOTIFY characteristic
 			else if (c.CharacteristicProperties() == GattCharacteristicProperties::Notify) {
 				//std::cout << "\t\t\t\tGattCharacteristicProperties::Notify" << std::endl;
@@ -302,6 +390,51 @@ IAsyncAction OpenDevice(unsigned long long deviceAddress)
 					std::cout << e.what() << std::endl;
 				}
 			}
+
+			// If it a INDICATE characteristic
+			else if (c.CharacteristicProperties() == GattCharacteristicProperties::Indicate) {
+				//std::cout << "\t\t\t\tGattCharacteristicProperties::Indicate" << std::endl;
+
+				try {
+					std::cout << "OpenDevice - in Indicate Char. - before writing CCCD: thread id = " << std::this_thread::get_id() << std::endl;
+
+					auto resultRead = co_await c.ReadClientCharacteristicConfigurationDescriptorAsync();
+					if (resultRead.ClientCharacteristicConfigurationDescriptor() == GattClientCharacteristicConfigurationDescriptorValue::Indicate ) {
+						std::cout << "OpenDevice - Indicate - CCCD already set to Indicate" << std::endl;
+					}
+					else if (resultRead.ClientCharacteristicConfigurationDescriptor() == GattClientCharacteristicConfigurationDescriptorValue::Notify) {
+						std::cout << "OpenDevice - Indicate - CCCD already set to Notify" << std::endl;
+					}
+					else {
+						std::cout << "OpenDevice - Indicate - CCCD already set to None" << std::endl;
+						
+						// BT_Code: Must write the CCCD in order for server to send indications.
+						// We receive them in the ValueChanged event handler.
+						// Note that this sample configures either Indicate or Notify, but not both.
+
+						//## If CCCD is already set to Indicate, setting it again MIGHT give an exception?
+						auto result = co_await c.WriteClientCharacteristicConfigurationDescriptorAsync(
+							GattClientCharacteristicConfigurationDescriptorValue::Indicate);
+
+						std::cout << "OpenDevice - in Indicate Char. - after writing CCCD: thread id = " << std::this_thread::get_id() << std::endl;
+
+						if (result == GattCommunicationStatus::Success) {
+
+							auto readResult = co_await c.ReadValueAsync();
+							if (readResult.Status() == GattCommunicationStatus::Success) {
+								DataReader reader = DataReader::FromBuffer(readResult.Value());
+								std::wcout << "\t\t\t\tCharacteristic Data - [" << reader.ReadString(readResult.Value().Length()).c_str() << "]" << std::endl;			//If cout instead of wcout is used -> data will be printed in some other format
+							}
+
+							//std::thread notifyThread(GetNotificationData(c, 1));
+						}
+					}
+				}
+				catch (const std::exception& e) {
+					std::cout << e.what() << std::endl;
+				}
+			}
+
 			else	// if (c.CharacteristicProperties() == GattCharacteristicProperties::Read) and others
 			{
 				auto readResult = co_await c.ReadValueAsync();
@@ -333,7 +466,7 @@ IAsyncAction OpenDevice(unsigned long long deviceAddress)
 
 			std::cout << "OpenDevice - in Services() - before Sleep(): thread id = " << std::this_thread::get_id() << std::endl;
 
-			int duration_of_receiving_notification = 1000;		//in milli-seconds
+			int duration_of_receiving_notification = 10000;		//in milli-seconds
 			Sleep( duration_of_receiving_notification );
 		}
 		else {
@@ -355,6 +488,7 @@ int main()
 	init_apartment();
 
 	std::atomic<unsigned long long> deviceAddress = 0;
+	unsigned long long myDeviceAdd = 242485699286186;
 
 	try
 	{
@@ -372,7 +506,10 @@ int main()
 
 		watcher.Received([&](BluetoothLEAdvertisementWatcher watcher, BluetoothLEAdvertisementReceivedEventArgs eventArgs)
 		{
-			watcher.Stop();
+			if( eventArgs.BluetoothAddress() == myDeviceAdd )
+				watcher.Stop();
+
+			//watcher.Stop();
 
 			std::wcout <<
 				"AdvertisementReceived:" << std::endl <<
@@ -394,7 +531,7 @@ int main()
 
 		int count = 0;
 
-		while ((count++ < 10) && deviceAddress == 0)
+		while ((count++ < 5) ) // && deviceAddress == 0)
 		{
 			std::this_thread::sleep_for(std::chrono::seconds(1));
 			std::cout << '.';
