@@ -22,7 +22,7 @@ using namespace Windows::Devices::Bluetooth::GenericAttributeProfile;
 //#include <pthread.h>
 //#include <unistd.h>
 #include <set>
-#include <typeinfo>
+//#include <typeinfo>
 
 
 
@@ -110,12 +110,15 @@ std::string string_from_wstring(std::wstring wstr) {
 
 void PrintStringFromIBuffer(IBuffer buffer) {
 	DataReader reader = DataReader::FromBuffer( buffer );
-	std::cout << "<" << reader.ReadString(buffer.Length()).c_str() << ">" << std::endl;		//Previously was std::wcout
+	std::wcout << "<" << reader.ReadString(buffer.Length()).c_str() << ">" << std::endl;		//Previously was std::wcout
 }
 
 void PrintIntFromIBuffer(IBuffer buffer) {
+	
 	DataReader reader = DataReader::FromBuffer(buffer);
-	std::cout << "<" << reader.ReadInt32() << ">" << std::endl;
+	//std::cout << "<" << reader.ReadString(buffer.Length())[0] << ">" << std::endl;	//Displaying the first byte received [Works]
+	//std::cout << "<" << std::to_string( *( reader.ReadString( buffer.Length() ).c_str() )) << ">" << std::endl;		//Works
+	std::cout << "<" << (*( reader.ReadString(buffer.Length()).c_str() )) << ">" << std::endl;		//#### Gets the integer value
 }
 
 
@@ -152,12 +155,11 @@ void ValueChanged_Handler(GattCharacteristic sender, GattValueChangedEventArgs a
 	std::cout << "ValueChanged_Handler: thread id = " << std::this_thread::get_id() << std::endl;
 
 	std::cout << "ValueChanged_Handler: ["
-		<< uint64_t_to_string(sender.AttributeHandle())
-		<< "]" << std::endl;
+		<< uint64_t_to_string(sender.AttributeHandle()) << "]" << std::endl;
 
-	//PrintIntFromIBuffer(args.CharacteristicValue());
+	PrintIntFromIBuffer(args.CharacteristicValue());
 
-	PrintStringFromIBuffer(args.CharacteristicValue());
+	//PrintStringFromIBuffer(args.CharacteristicValue());
 	//ReadCharacteristicData( sender );			//Gives exactly the same data as -> PrintStringFromIBuffer(args.CharacteristicValue());
 }
 
@@ -201,11 +203,12 @@ IAsyncAction WriteStringToChar(GattCharacteristic c, std::string valueToWrite ) 
 
 
 
-void PrintCharProperties(GattCharacteristic c) {
+void CharPropertySpecificOperation(GattCharacteristic c) {
 	if (c.CharacteristicProperties() == GattCharacteristicProperties::Notify ) {
-		//c.ValueChanged();
-
 		std::cout << "\t\t\t\tGattCharacteristicProperties::Notify" << std::endl;
+
+		//c.ValueChanged();
+		WriteCCCD(c);
 	}
 	else if (c.CharacteristicProperties() == GattCharacteristicProperties::Indicate) {
 		std::cout << "\t\t\t\tGattCharacteristicProperties::Indicate" << std::endl;
@@ -221,13 +224,15 @@ void PrintCharProperties(GattCharacteristic c) {
 	}
 	else if (c.CharacteristicProperties() == ( GattCharacteristicProperties::Read | GattCharacteristicProperties::Notify ) ) {
 		std::cout << "\t\t\t\tGattCharacteristicProperties::Read and Notify" << std::endl;
+
+		WriteCCCD(c);
 	}
 	else if (c.CharacteristicProperties() == (GattCharacteristicProperties::Write | GattCharacteristicProperties::WriteWithoutResponse )) {
 		std::cout << "\t\t\t\tGattCharacteristicProperties::Write and WriteWithoutResponse" << std::endl;
 
-		//TODO: Shift to an char. specific operations
-		/////HARDCODING
-		if (uint64_t_to_string(c.AttributeHandle()) != "18") {
+		//TODO: move this some char. specific operation function
+		/////~~HARDCODING~~
+		if (uint64_t_to_string(c.AttributeHandle()) == "16") {
 			WriteStringToChar(c, "ff");
 		}
 	}
@@ -262,12 +267,7 @@ void PrintCharProperties(GattCharacteristic c) {
 
 
 IAsyncAction WriteCCCD(GattCharacteristic c) {
-	if (c.CharacteristicProperties() == GattCharacteristicProperties::Notify) {
-		auto result = co_await c.WriteClientCharacteristicConfigurationDescriptorAsync(GattClientCharacteristicConfigurationDescriptorValue::Notify);
-	}
-	else if (c.CharacteristicProperties() == (GattCharacteristicProperties::Read | GattCharacteristicProperties::Notify)) {
-		auto result = co_await c.WriteClientCharacteristicConfigurationDescriptorAsync(GattClientCharacteristicConfigurationDescriptorValue::Notify );
-	}
+	auto result = co_await c.WriteClientCharacteristicConfigurationDescriptorAsync(GattClientCharacteristicConfigurationDescriptorValue::Notify );
 }
 
 
@@ -319,7 +319,7 @@ IAsyncAction OpenDevice(unsigned long long deviceAddress)
 		{
 			// Adding the ValueChanged event to the Characteristic c
 			auto x = c.ValueChanged( ValueChanged_Handler);// += ValueChanged_Handler;
-			/////////////// TODO: Consider adding the ValueChanged event only to Notify characteristics, using PrintCharProperties function
+			/////////////// TODO: Consider adding the ValueChanged event only to Notify characteristics, using CharPropertySpecificOperation function
 			std::string val = uint64_t_to_string(x.value);
 			std::cout << val << std::endl;
 
@@ -329,10 +329,10 @@ IAsyncAction OpenDevice(unsigned long long deviceAddress)
 				"\t\t\tCharacteristic - Guid: [" << guidToString(c.Uuid()) << "]" << std::endl;
 
 
-			PrintCharProperties(c);
+			CharPropertySpecificOperation(c);
 			//PrintStringSet(GetAllCharProperties(c));
 			
-			WriteCCCD(c);
+			//WriteCCCD(c);
 
 
 			// If it is a WRITE characteristic
@@ -456,15 +456,24 @@ IAsyncAction OpenDevice(unsigned long long deviceAddress)
 					std::cout << "\t\t\t\tGattCommunicationStatus::ProtocolError" << std::endl;
 				}
 			}
+
+			// Testing notification of Classroom Clicker [Works]
+			/////~~HARDCODING~~
+			if (uint64_t_to_string(c.AttributeHandle()) == "16") {
+				for (int i = 0; i < 10; i++) {
+					WriteStringToChar(c, "ff");
+					Sleep(1000);
+				}
+			}
 		}
 
 		//## Hardcoded to check for the last service of the device -> Changed to automatically finding the last service
 		if ( guidToString(s.Uuid()) == GetLastService_UuidId_wstring(services) ) {
+			std::cout << "OpenDevice - in Services() - before Sleep(): thread id = " << std::this_thread::get_id() << std::endl;
+
 			// Keep this running so that notification continues to be received
 			// This exits after the loop-time expires
 			//for (int i = 0; i < 100; i++) { Sleep(1000); }			// #### Works same as Sleep(100*1000)
-
-			std::cout << "OpenDevice - in Services() - before Sleep(): thread id = " << std::this_thread::get_id() << std::endl;
 
 			int duration_of_receiving_notification = 10000;		//in milli-seconds
 			Sleep( duration_of_receiving_notification );
