@@ -269,7 +269,7 @@ void CharPropertySpecificOperation(GattCharacteristic c) {
 
 		//move this to char. specific operation function
 		/////~~HARDCODING~~
-		if (uint64_t_to_string(c.AttributeHandle()) == "16") {
+		if (uint64_t_to_string(c.AttributeHandle()) == "16") {				//For more robustness, you may use UUID of characteristic for identification instead of AttributeHandle
 			WriteStringToChar(c, "ff");
 		}
 	}
