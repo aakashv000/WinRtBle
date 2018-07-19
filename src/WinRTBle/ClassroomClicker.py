@@ -5,7 +5,9 @@ __date__=     " April/June 2018"
 #######################Description #####################
 '''
     This Class room clicker software is designed for interactive class room learning, This software is developed for getting data from msp430
-    microcontroller through RF module and plot bar graph in GUI. This code is for Windows 10 supporting BLE.
+    microcontroller through RF module and plot bar graph in GUI.
+    
+    ~~~~~~~~~~~~~~~~~ This code is for Windows 10( x64 ) supporting BLE ~~~~~~~~~~~~~~~~~~~~
 
 '''
 ################Loding Modules###########################
@@ -96,7 +98,7 @@ class BarsFrame(wx.Frame):                                        #Creating bar 
         #         if 'RFduino' in value:      #Filter Only RFduino Device
         #             found_devices.append(dev.addr)
 
-        discover_exe = 'modules_exe\\discover.exe'
+        discover_exe = 'Modules\\exe\\discover.exe'
         child_process = sp.Popen( discover_exe, stdout = sp.PIPE )
         output_bytes = child_process.communicate()[0]
         # print( output_bytes )
@@ -213,11 +215,12 @@ class BarsFrame(wx.Frame):                                        #Creating bar 
                     ##### NOTE: as coded in exe file, the exe sleeps for 1 sec
 
                     answer = ''
+                    write_to_characteristic = 'ff'              # The string parameter that will be written to the write characteristic
 
                     address_ull = ull_from_bt_add( avail_devices[ i ] )
 
-                    connectAndRead_exe = 'modules_exe\\ConnectAndRead.exe'
-                    child_process = sp.Popen( [ connectAndRead_exe, str( address_ull ) ], stdout = sp.PIPE )
+                    connectAndRead_exe = 'Modules\\exe\\ConnectAndRead.exe'
+                    child_process = sp.Popen( [ connectAndRead_exe, str( address_ull ), write_to_characteristic ], stdout = sp.PIPE )
                     output_bytes = child_process.communicate()[0]
                     # print( output_bytes )
                     output_str = output_bytes.decode('utf-8')

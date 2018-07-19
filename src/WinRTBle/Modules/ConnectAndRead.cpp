@@ -8,6 +8,8 @@ using namespace Windows::Storage::Streams;
 
 #include <codecvt>
 
+std::string write_to_characteristic;
+
 
 //
 //
@@ -270,7 +272,7 @@ void CharPropertySpecificOperation(GattCharacteristic c) {
 		//move this to char. specific operation function
 		/////~~HARDCODING~~
 		if (uint64_t_to_string(c.AttributeHandle()) == "16") {				//For more robustness, you may use UUID of characteristic for identification instead of AttributeHandle
-			WriteStringToChar(c, "ff");
+			WriteStringToChar(c, write_to_characteristic);
 		}
 	}
 	else if (c.CharacteristicProperties() == (GattCharacteristicProperties::Read | GattCharacteristicProperties::Write)) {
@@ -507,6 +509,8 @@ int main( int argc, char* argv[] )
 	//unsigned long long myDeviceAdd = 242485699286186;			//Passed this as argument( via Project Properties -> Debugging -> Command arguments )
 
 	//std::cout << deviceAddress << std::endl;
+
+	write_to_characteristic = argv[2];
 
 	try
 	{
