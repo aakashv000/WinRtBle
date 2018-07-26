@@ -201,6 +201,12 @@ IAsyncAction WriteStringToChar(GattCharacteristic c, std::string valueToWrite ) 
 
 
 
+//////TODO: make WriteCCCD recognize the type of characteristic i.e Notify, Indicate, Read|Notify, etc.,
+/////////// and then write CCCD value accordingly i.e., Notify value or Indicate value
+IAsyncAction WriteCCCD(GattCharacteristic c) {
+	auto result = co_await c.WriteClientCharacteristicConfigurationDescriptorAsync(GattClientCharacteristicConfigurationDescriptorValue::Notify );
+}
+
 
 
 void CharPropertySpecificOperation(GattCharacteristic c) {
@@ -212,6 +218,8 @@ void CharPropertySpecificOperation(GattCharacteristic c) {
 	}
 	else if (c.CharacteristicProperties() == GattCharacteristicProperties::Indicate) {
 		std::cout << "\t\t\t\tGattCharacteristicProperties::Indicate" << std::endl;
+
+		//WriteCCCD(c);
 	}
 	else if (c.CharacteristicProperties() == GattCharacteristicProperties::Read) {
 		std::cout << "\t\t\t\tGattCharacteristicProperties::Read" << std::endl;
@@ -264,11 +272,6 @@ void CharPropertySpecificOperation(GattCharacteristic c) {
 //
 //	return properties;
 //}
-
-
-IAsyncAction WriteCCCD(GattCharacteristic c) {
-	auto result = co_await c.WriteClientCharacteristicConfigurationDescriptorAsync(GattClientCharacteristicConfigurationDescriptorValue::Notify );
-}
 
 
 
@@ -393,10 +396,10 @@ IAsyncAction OpenDevice(unsigned long long deviceAddress)
 
 			// If it a INDICATE characteristic
 			else if (c.CharacteristicProperties() == GattCharacteristicProperties::Indicate) {
-				//std::cout << "\t\t\t\tGattCharacteristicProperties::Indicate" << std::endl;
+				std::cout << "\t\t\t\tGattCharacteristicProperties::Indicate" << std::endl;
 
 				try {
-					std::cout << "OpenDevice - in Indicate Char. - before writing CCCD: thread id = " << std::this_thread::get_id() << std::endl;
+					//std::cout << "OpenDevice - in Indicate Char. - before writing CCCD: thread id = " << std::this_thread::get_id() << std::endl;
 
 					auto resultRead = co_await c.ReadClientCharacteristicConfigurationDescriptorAsync();
 					if (resultRead.ClientCharacteristicConfigurationDescriptor() == GattClientCharacteristicConfigurationDescriptorValue::Indicate ) {
@@ -412,7 +415,7 @@ IAsyncAction OpenDevice(unsigned long long deviceAddress)
 						// We receive them in the ValueChanged event handler.
 						// Note that this sample configures either Indicate or Notify, but not both.
 
-						//## If CCCD is already set to Indicate, setting it again MIGHT give an exception?
+						//#### If its a characteristic of Generic Attribute service( i.e., if its value can't be changed ) -> then writing CCCD will give exception
 						auto result = co_await c.WriteClientCharacteristicConfigurationDescriptorAsync(
 							GattClientCharacteristicConfigurationDescriptorValue::Indicate);
 
@@ -497,7 +500,7 @@ int main()
 	init_apartment();
 
 	std::atomic<unsigned long long> deviceAddress = 0;
-	unsigned long long myDeviceAdd = 242485699286186;
+	unsigned long long myDeviceAdd = 53526638260286;
 
 	try
 	{
@@ -515,8 +518,9 @@ int main()
 
 		watcher.Received([&](BluetoothLEAdvertisementWatcher watcher, BluetoothLEAdvertisementReceivedEventArgs eventArgs)
 		{
-			if( eventArgs.BluetoothAddress() == myDeviceAdd )
+			if (eventArgs.BluetoothAddress() == myDeviceAdd) {
 				watcher.Stop();
+			}
 
 			//watcher.Stop();
 
