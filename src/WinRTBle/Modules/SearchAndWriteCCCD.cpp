@@ -40,12 +40,30 @@ IAsyncAction WriteCCCD(GattCharacteristic c) {
 
 
 
+IAsyncAction ReadCCCD(GattCharacteristic c) {
+	auto resultRead = co_await c.ReadClientCharacteristicConfigurationDescriptorAsync();
+	
+	if (resultRead.ClientCharacteristicConfigurationDescriptor() == GattClientCharacteristicConfigurationDescriptorValue::Indicate) {
+		std::cout << "OpenDevice - Indicate - CCCD already set to Indicate" << std::endl;
+	}
+	else if (resultRead.ClientCharacteristicConfigurationDescriptor() == GattClientCharacteristicConfigurationDescriptorValue::Notify) {
+		std::cout << "OpenDevice - Indicate - CCCD already set to Notify" << std::endl;
+	}
+	else {
+		std::cout << "OpenDevice - Indicate - CCCD already set to None" << std::endl;
+		//return 0;
+	}
+}
+
+
+
 void CharPropertySpecificOperation(GattCharacteristic c) {
 	if (c.CharacteristicProperties() == GattCharacteristicProperties::Notify) {
 		std::cout << "\t\t\t\tGattCharacteristicProperties::Notify" << std::endl;
 
 		c.ValueChanged( ValueChanged_Handler );
 		
+		ReadCCCD(c);
 		WriteCCCD(c);
 	}
 	else if (c.CharacteristicProperties() == GattCharacteristicProperties::Indicate) {
@@ -66,6 +84,8 @@ void CharPropertySpecificOperation(GattCharacteristic c) {
 		std::cout << "\t\t\t\tGattCharacteristicProperties::Read and Notify" << std::endl;
 
 		c.ValueChanged( ValueChanged_Handler );
+
+		ReadCCCD(c);
 		WriteCCCD(c);
 	}
 	else if (c.CharacteristicProperties() == (GattCharacteristicProperties::Write | GattCharacteristicProperties::WriteWithoutResponse)) {
